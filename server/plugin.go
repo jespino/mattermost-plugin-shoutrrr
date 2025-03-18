@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-shoutrrr/server/command"
+	"github.com/mattermost/mattermost-plugin-shoutrrr/server/notification"
 	"github.com/mattermost/mattermost-plugin-shoutrrr/server/store/kvstore"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -28,6 +29,9 @@ type Plugin struct {
 	// commandClient is the client used to register and execute slash commands.
 	commandClient command.Command
 
+	// notificationService is the client used to send notifications using Shoutrrr
+	notificationService *notification.Service
+
 	backgroundJob *cluster.Job
 
 	// configurationLock synchronizes access to the configuration.
@@ -45,6 +49,9 @@ func (p *Plugin) OnActivate() error {
 	p.kvstore = kvstore.NewKVStore(p.client)
 
 	p.commandClient = command.NewCommandHandler(p.client)
+
+	// Initialize notification service
+	p.notificationService = notification.NewService(p.client)
 
 	job, err := cluster.Schedule(
 		p.API,
@@ -131,6 +138,40 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 		"all_mentioned", mentions.AllMentioned,
 		"group_mentions", formatMentionsForLog(mentions.GroupMentions),
 		"other_potential_mentions", mentions.OtherPotentialMentions)
+	
+	// Send notifications to mentioned users
+	sender, err := p.API.GetUser(post.UserId)
+	if err != nil {
+		p.API.LogError("Failed to get sender for notification", "error", err.Error())
+		return
+	}
+	
+	// Extract post message to use in notification
+	message := post.Message
+	if len(message) > 100 {
+		message = message[:97] + "..."
+	}
+	
+	// Send notifications to all mentioned users
+	for userID := range mentions.Mentions {
+		// Don't send notifications to the post author
+		if userID == post.UserId {
+			continue
+		}
+		
+		err = p.notificationService.SendMentionNotification(
+			userID, 
+			post.Id, 
+			channel.DisplayName, 
+			sender.Username, 
+			message,
+		)
+		if err != nil {
+			p.API.LogError("Failed to send mention notification", 
+				"error", err.Error(),
+				"userId", userID)
+		}
+	}
 }
 
 // formatMentionsForLog converts a map of mentions to a comma-separated string for logging
