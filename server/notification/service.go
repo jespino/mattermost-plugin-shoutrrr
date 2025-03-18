@@ -25,20 +25,31 @@ func NewService(client *pluginapi.Client) *Service {
 
 // SendUserNotification sends a notification to a user based on their configured services
 func (s *Service) SendUserNotification(userID, message string) error {
-	// Get user preferences directly from the database
-	preferences, err := s.client.Preference.GetForUser(userID)
-	if err != nil {
-		s.client.Log.Error("Failed to get user preferences", "userId", userID, "error", err)
-		return err
+	// Get database connection
+	db := s.client.GetMasterDB()
+	if db == nil {
+		s.client.Log.Error("Failed to get database connection", "userId", userID)
+		return fmt.Errorf("failed to get database connection")
 	}
-
-	// Find the notification_services preference
+	
+	// Query the database directly for user preferences
+	query := `
+		SELECT Value 
+		FROM Preferences 
+		WHERE UserId = ? 
+		AND Category = 'plugin_com.mattermost.plugin-shoutrrr' 
+		AND Name = 'notification_services'
+	`
 	var servicesStr string
-	for _, pref := range preferences {
-		if pref.Category == "plugin_com.mattermost.plugin-shoutrrr" && pref.Name == "notification_services" {
-			servicesStr = pref.Value
-			break
+	err := db.QueryRow(query, userID).Scan(&servicesStr)
+	if err != nil {
+		// If no rows found, it's not an error, just no services configured
+		if err.Error() == "sql: no rows in result set" {
+			s.client.Log.Debug("No notification services configured for user", "userId", userID)
+			return nil
 		}
+		s.client.Log.Error("Failed to query user preferences from database", "userId", userID, "error", err)
+		return fmt.Errorf("failed to query user preferences: %w", err)
 	}
 
 	if servicesStr == "" {
