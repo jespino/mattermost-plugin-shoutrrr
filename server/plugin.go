@@ -71,6 +71,115 @@ func (p *Plugin) OnDeactivate() error {
 	return nil
 }
 
+// MessageHasBeenPosted is called after a message has been posted.
+// This hook extracts all mentions from the post and logs them.
+func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
+	// Get channel info
+	channel, err := p.API.GetChannel(post.ChannelId)
+	if err != nil {
+		p.API.LogError("Failed to get channel", "error", err.Error())
+		return
+	}
+
+	// Get user profiles for the channel
+	profiles, err := p.API.GetUsersInChannel(post.ChannelId, "", 0, 1000)
+	if err != nil {
+		p.API.LogError("Failed to get users in channel", "error", err.Error())
+		return
+	}
+
+	// Convert profiles slice to map for easier lookup
+	profileMap := make(map[string]*model.User)
+	for _, profile := range profiles {
+		profileMap[profile.Id] = profile
+	}
+
+	// Get channel member notify properties
+	channelMemberNotifyPropsMap := make(map[string]model.StringMap)
+	members, err := p.API.GetChannelMembers(post.ChannelId, 0, 1000)
+	if err != nil {
+		p.API.LogError("Failed to get channel members", "error", err.Error())
+		return
+	}
+	for _, member := range *members {
+		props, err := p.API.GetChannelMemberNotifyProps(post.ChannelId, member.UserId)
+		if err != nil {
+			p.API.LogError("Failed to get notify props", "error", err.Error())
+			continue
+		}
+		channelMemberNotifyPropsMap[member.UserId] = props
+	}
+
+	// Get any parent posts if this is a reply
+	var parentPostList *model.PostList
+	if post.RootId != "" {
+		parentPostList, err = p.API.GetPostThread(post.RootId)
+		if err != nil {
+			p.API.LogError("Failed to get parent post list", "error", err.Error())
+			return
+		}
+	}
+
+	// Get groups (for group mentions)
+	groups := make(map[string]*model.Group)
+	// We're using an empty map for groups for simplicity
+
+	// Extract mentions using the existing method
+	mentions, keywords := p.getExplicitMentionsAndKeywords(post, channel, profileMap, groups, channelMemberNotifyPropsMap, parentPostList)
+
+	// Log the mentions
+	p.API.LogInfo("Message mentions detected", 
+		"post_id", post.Id,
+		"user_mentions", formatMentionsForLog(mentions.Mentions),
+		"here_mentioned", mentions.HereMentioned,
+		"channel_mentioned", mentions.ChannelMentioned,
+		"all_mentioned", mentions.AllMentioned,
+		"group_mentions", formatMentionsForLog(mentions.GroupMentions),
+		"other_potential_mentions", mentions.OtherPotentialMentions)
+}
+
+// formatMentionsForLog converts a map of mentions to a comma-separated string for logging
+func formatMentionsForLog(mentions map[string]MentionType) string {
+	if len(mentions) == 0 {
+		return "none"
+	}
+	
+	result := "["
+	first := true
+	for id, mentionType := range mentions {
+		if !first {
+			result += ", "
+		}
+		result += id + ":" + formatMentionType(mentionType)
+		first = false
+	}
+	return result + "]"
+}
+
+// formatMentionType converts a MentionType to a string representation
+func formatMentionType(mentionType MentionType) string {
+	switch mentionType {
+	case NoMention:
+		return "none"
+	case GMMention:
+		return "gm"
+	case ThreadMention:
+		return "thread"
+	case CommentMention:
+		return "comment"
+	case ChannelMention:
+		return "channel"
+	case DMMention:
+		return "dm"
+	case KeywordMention:
+		return "keyword"
+	case GroupMention:
+		return "group"
+	default:
+		return "unknown"
+	}
+}
+
 // This will execute the commands that were registered in the NewCommandHandler function.
 func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
 	response, err := p.commandClient.Handle(args)
