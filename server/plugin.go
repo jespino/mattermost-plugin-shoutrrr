@@ -82,7 +82,7 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 	}
 
 	// Get user profiles for the channel
-	profiles, err := p.API.GetUsersInChannel(post.ChannelId, "", 0, 1000)
+	profiles, err := p.API.GetUsersInChannel(post.ChannelId, "username", 0, 1000)
 	if err != nil {
 		p.API.LogError("Failed to get users in channel", "error", err.Error())
 		return
@@ -101,13 +101,8 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 		p.API.LogError("Failed to get channel members", "error", err.Error())
 		return
 	}
-	for _, member := range *members {
-		props, err := p.API.GetChannelMemberNotifyProps(post.ChannelId, member.UserId)
-		if err != nil {
-			p.API.LogError("Failed to get notify props", "error", err.Error())
-			continue
-		}
-		channelMemberNotifyPropsMap[member.UserId] = props
+	for _, member := range members {
+		channelMemberNotifyPropsMap[member.UserId] = member.NotifyProps
 	}
 
 	// Get any parent posts if this is a reply
@@ -125,10 +120,10 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 	// We're using an empty map for groups for simplicity
 
 	// Extract mentions using the existing method
-	mentions, keywords := p.getExplicitMentionsAndKeywords(post, channel, profileMap, groups, channelMemberNotifyPropsMap, parentPostList)
+	mentions, _ := p.getExplicitMentionsAndKeywords(post, channel, profileMap, groups, channelMemberNotifyPropsMap, parentPostList)
 
 	// Log the mentions
-	p.API.LogInfo("Message mentions detected", 
+	p.API.LogInfo("Message mentions detected",
 		"post_id", post.Id,
 		"user_mentions", formatMentionsForLog(mentions.Mentions),
 		"here_mentioned", mentions.HereMentioned,
@@ -143,7 +138,7 @@ func formatMentionsForLog(mentions map[string]MentionType) string {
 	if len(mentions) == 0 {
 		return "none"
 	}
-	
+
 	result := "["
 	first := true
 	for id, mentionType := range mentions {
