@@ -25,13 +25,12 @@ func NewService(client *pluginapi.Client) *Service {
 
 // SendUserNotification sends a notification to a user based on their configured services
 func (s *Service) SendUserNotification(userID, message string) error {
-	// Get user preferences for notification services
-	user, err := s.client.User.Get(userID)
+	// Get user preferences directly from the database
+	preferences, err := s.client.Preference.GetForUser(userID)
 	if err != nil {
 		s.client.Log.Error("Failed to get user preferences", "userId", userID, "error", err)
 		return err
 	}
-	preferences := user.Props
 
 	// Find the notification_services preference
 	var servicesStr string
