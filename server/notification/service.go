@@ -19,29 +19,28 @@ type Service struct {
 func NewService(client *pluginapi.Client) *Service {
 	return &Service{
 		client: client,
-		router: shoutrrr.CreateSender(),
 	}
 }
 
 // SendUserNotification sends a notification to a user based on their configured services
 func (s *Service) SendUserNotification(userID, message string) error {
 	// Get database connection
-	db := s.client.GetMasterDB()
-	if db == nil {
-		s.client.Log.Error("Failed to get database connection", "userId", userID)
+	db, err := s.client.Store.GetMasterDB()
+	if err != nil {
+		s.client.Log.Error("Failed to get database connection", "userId", userID, "error", err)
 		return fmt.Errorf("failed to get database connection")
 	}
-	
+
 	// Query the database directly for user preferences
 	query := `
-		SELECT Value 
-		FROM Preferences 
-		WHERE UserId = ? 
-		AND Category = 'plugin_com.mattermost.plugin-shoutrrr' 
+		SELECT Value
+		FROM Preferences
+		WHERE UserId = $1
+		AND Category = 'pp_com.mattermost.plugin-shoutrr'
 		AND Name = 'notification_services'
 	`
 	var servicesStr string
-	err := db.QueryRow(query, userID).Scan(&servicesStr)
+	err = db.QueryRow(query, userID).Scan(&servicesStr)
 	if err != nil {
 		// If no rows found, it's not an error, just no services configured
 		if err.Error() == "sql: no rows in result set" {
@@ -69,7 +68,7 @@ func (s *Service) SendUserNotification(userID, message string) error {
 			continue
 		}
 
-		err := s.router.Send(message, serviceURL)
+		err := shoutrrr.Send(serviceURL, message)
 		if err != nil {
 			s.client.Log.Error("Failed to send notification",
 				"userId", userID,

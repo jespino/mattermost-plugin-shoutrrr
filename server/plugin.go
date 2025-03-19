@@ -138,37 +138,37 @@ func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
 		"all_mentioned", mentions.AllMentioned,
 		"group_mentions", formatMentionsForLog(mentions.GroupMentions),
 		"other_potential_mentions", mentions.OtherPotentialMentions)
-	
+
 	// Send notifications to mentioned users
 	sender, err := p.API.GetUser(post.UserId)
 	if err != nil {
 		p.API.LogError("Failed to get sender for notification", "error", err.Error())
 		return
 	}
-	
+
 	// Extract post message to use in notification
 	message := post.Message
 	if len(message) > 100 {
 		message = message[:97] + "..."
 	}
-	
+
 	// Send notifications to all mentioned users
 	for userID := range mentions.Mentions {
 		// Don't send notifications to the post author
 		if userID == post.UserId {
 			continue
 		}
-		
-		err = p.notificationService.SendMentionNotification(
-			userID, 
-			post.Id, 
-			channel.DisplayName, 
-			sender.Username, 
+
+		appErr := p.notificationService.SendMentionNotification(
+			userID,
+			post.Id,
+			channel.DisplayName,
+			sender.Username,
 			message,
 		)
-		if err != nil {
-			p.API.LogError("Failed to send mention notification", 
-				"error", err.Error(),
+		if appErr != nil {
+			p.API.LogError("Failed to send mention notification",
+				"error", appErr.Error(),
 				"userId", userID)
 		}
 	}

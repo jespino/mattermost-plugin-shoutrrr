@@ -22,7 +22,7 @@ export default class Plugin {
         const userSettings: PluginConfiguration = {
             id: manifest.id,
             uiName: 'Notification Services',
-            icon: "icon-bell",
+            icon: "icon-bell-outline",
             sections: [
                 {
                     title: 'Notification Services Settings',
