@@ -59,10 +59,15 @@ const NotificationServicesSettings: PluginCustomSettingComponent = ({ informChan
             
             <details className='mt-2 mb-3'>
                 <summary className='cursor-pointer text-blue-600' style={{cursor: 'pointer'}}>
-                    <i className='fa fa-chevron-right mr-2' style={{fontSize: '0.8em', transition: 'transform 0.2s'}}></i>
+                    <i className='fa fa-chevron-right mr-2' style={{fontSize: '0.8em', transition: 'transform 0.2s', display: 'inline-block'}}></i>
                     Service URL Format Help
                 </summary>
-                <div className='mt-2 p-3 border rounded bg-light'>
+                <style>{`
+                    details[open] > summary > i.fa-chevron-right {
+                        transform: rotate(90deg);
+                    }
+                `}</style>
+                <div className='mt-2 p-3 border rounded bg-white'>
                     <p className='mb-2'>Enter service URLs using one of these formats:</p>
                     <div style={{maxHeight: '250px', overflowY: 'auto'}}>
                         <table className='table table-sm table-bordered'>
